@@ -10,6 +10,7 @@ import (
 type State struct {
 	SelectedPaneID string `json:"selected_pane_id,omitempty"`
 	View           string `json:"view,omitempty"`
+	ArtIndex       int    `json:"art_index,omitempty"`
 }
 
 func Load() State {

@@ -52,6 +52,7 @@ type Model struct {
 	jumping         bool
 	spinnerFrame    int
 	followPreview   bool
+	artIndex        int
 }
 
 var (
@@ -72,7 +73,7 @@ const refreshInterval = 200 * time.Millisecond
 func New(panes []tmux.Pane) Model {
 	vp := viewport.New(80, 20)
 	state := appstate.Load()
-	m := Model{panes: panes, previewViewport: vp, viewMode: normalizeViewMode(state.View), followPreview: true}
+	m := Model{panes: panes, previewViewport: vp, viewMode: normalizeViewMode(state.View), followPreview: true, artIndex: normalizeArtIndex(state.ArtIndex)}
 	m.applyView()
 	m.selectPane(state.SelectedPaneID)
 	return m
@@ -128,6 +129,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.followPreview = true
 			m.saveState()
 			return m, m.loadPreview()
+		case "?":
+			m.artIndex = (m.artIndex + 1) % len(brandingArts)
+			m.saveState()
+			return m, nil
 		case "enter":
 			if len(m.panes) > 0 {
 				m.jumping = true
@@ -189,7 +194,7 @@ func (m Model) View() string {
 	left := renderBox(listStyle, leftWidth, bodyHeight, m.renderList(leftWidth, bodyHeight))
 	right := renderBox(paneStyle, rightWidth, bodyHeight, m.renderPreviewPane(rightWidth, bodyHeight))
 
-	help := mutedStyle.Render(fmt.Sprintf("view: %s • v: switch • j/k: move • K/J: scroll line • enter: jump • q/esc: close", m.viewMode.Label()))
+	help := mutedStyle.Render(fmt.Sprintf("view: %s • v: switch • ?: art • j/k: move • K/J: scroll • enter: jump • q/esc: close", m.viewMode.Label()))
 	if m.jumping {
 		help = mutedStyle.Render("jumping…")
 	}
@@ -205,15 +210,21 @@ func (m Model) View() string {
 }
 
 func (m Model) renderTitleBar(width int) string {
-	innerWidth := max(1, width-2)
-	brand := titleStyle.Render("sup?huh?")
+	const padding = 2
+	innerWidth := max(1, width-padding*2)
+	brandText := "sup?huh?"
 	counts := m.agentCounts()
-	right := mutedStyle.Render(fmt.Sprintf("%d panes • %d agents • %d working", len(m.panes), counts.agents, counts.working))
-	gap := innerWidth - ansi.StringWidth(brand) - ansi.StringWidth(right)
-	if gap < 1 {
-		return insetLine(brand, width)
+	rightText := fmt.Sprintf("%d panes • %d agents • %d working", len(m.panes), counts.agents, counts.working)
+
+	availableRight := innerWidth - ansi.StringWidth(brandText) - 1
+	if availableRight < 1 {
+		return insetLine(titleStyle.Render(brandText), width)
 	}
-	return insetLine(brand+strings.Repeat(" ", gap)+right, width)
+	rightText = truncate(rightText, availableRight)
+	gap := max(1, innerWidth-ansi.StringWidth(brandText)-ansi.StringWidth(rightText))
+
+	line := strings.Repeat(" ", padding) + titleStyle.Render(brandText) + strings.Repeat(" ", gap) + mutedStyle.Render(rightText) + strings.Repeat(" ", padding)
+	return fitLine(line, width)
 }
 
 func (m Model) renderList(width int, height int) string {
@@ -245,17 +256,54 @@ func (m Model) renderList(width int, height int) string {
 	return strings.Join(lines, "\n")
 }
 
+var brandingArts = [][]string{
+	{
+		"██████╗ ",
+		"╚═══██║",
+		"  ▄██╔╝",
+		"  ▀▀═╝ ",
+		"  ██╗  ",
+		"  ╚═╝  ",
+	},
+	{
+		` ________   `,
+		`("      "\  `,
+		` \___/   :) `,
+		`   /  ___/  `,
+		`  //  \     `,
+		` ('___/     `,
+		`  (___)     `,
+	},
+}
+
+func normalizeArtIndex(index int) int {
+	if len(brandingArts) == 0 || index < 0 || index >= len(brandingArts) {
+		return 0
+	}
+	return index
+}
+
 func (m Model) addBranding(lines []string, width int, height int) []string {
-	if len(lines) > height-4 || width < 18 {
+	art := brandingArts[normalizeArtIndex(m.artIndex)]
+	if len(lines) > height-len(art) || width < 18 {
 		return lines
 	}
-	for len(lines) < height-3 {
+	for len(lines) < height-len(art) {
 		lines = append(lines, "")
 	}
-	return append(lines,
-		mutedStyle.Render(centerText("sup?huh?", width)),
-		mutedStyle.Render(centerText("(supper?)", width)),
-	)
+	styles := []lipgloss.Style{
+		lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("207")).Bold(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("171")).Bold(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("135")).Bold(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("99")).Bold(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Bold(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Bold(true),
+	}
+	for i, line := range art {
+		lines = append(lines, styles[i%len(styles)].Render(centerText(line, width)))
+	}
+	return lines
 }
 
 func (m *Model) updatePreviewViewport() {
@@ -438,7 +486,7 @@ func (m Model) selectedPaneID() string {
 }
 
 func (m Model) saveState() {
-	_ = appstate.Save(appstate.State{SelectedPaneID: m.selectedPaneID(), View: string(m.viewMode)})
+	_ = appstate.Save(appstate.State{SelectedPaneID: m.selectedPaneID(), View: string(m.viewMode), ArtIndex: m.artIndex})
 }
 
 func scheduleRefresh() tea.Cmd {
