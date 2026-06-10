@@ -10,6 +10,41 @@ import (
 	"suphuh/internal/tmux"
 )
 
+func TestViewContainsDesignElements(t *testing.T) {
+	m := New([]tmux.Pane{
+		{SessionName: "suphuh", CurrentCommand: "pi", DisplayCommand: "pi", CurrentPath: "/Users/don/projects/suphuh", PaneID: "%1"},
+		{SessionName: "notes", CurrentCommand: "zsh", DisplayCommand: "zsh", CurrentPath: "/Users/don", PaneID: "%2"},
+	})
+	m.width = 100
+	m.height = 30
+	m.preview = "hello\nworld\n"
+	m.updatePreviewViewport()
+
+	plain := ansi.Strip(m.View())
+	for _, want := range []string{"sup?huh?", "2 panes", "pi", "suphuh", "/Users/don/projects/suphuh"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("view missing %q\n%s", want, numbered(plain))
+		}
+	}
+}
+
+func TestViewVisualSnapshot(t *testing.T) {
+	m := New([]tmux.Pane{
+		{SessionName: "suphuh", CurrentCommand: "pi", DisplayCommand: "pi", CurrentPath: "/Users/don/projects/suphuh", PaneID: "%1"},
+		{SessionName: "lois", CurrentCommand: "pi", DisplayCommand: "pi", CurrentPath: "/Users/don/hypr/clients/lois", PaneID: "%2"},
+		{SessionName: "zsh", CurrentCommand: "zsh", DisplayCommand: "zsh", CurrentPath: "/Users/don", PaneID: "%3"},
+	})
+	m.width = 100
+	m.height = 30
+	m.viewMode = ViewAgentsFirst
+	m.preview = strings.Repeat("preview line\n", 8)
+	m.updatePreviewViewport()
+
+	view := m.View()
+	assertStableView(t, view, 100, 30)
+	t.Logf("rendered TUI snapshot:\n%s", numbered(ansi.Strip(view)))
+}
+
 func TestViewMaintainsStableDimensions(t *testing.T) {
 	panes := []tmux.Pane{
 		{SessionName: "short", CurrentCommand: "zsh", WindowIndex: 1, PaneIndex: 1, CurrentPath: "/tmp", PaneID: "%1"},

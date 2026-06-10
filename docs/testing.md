@@ -40,12 +40,20 @@ This handles ANSI escape sequences and wide characters better than `len(line)`.
 When debugging a rendered view, print line numbers and measured widths:
 
 ```text
-01 100 suphuh
+01 100 sup?huh?                  3 panes • 2 agents • 0 working
 02 100 ╭────╮╭────╮
 03 100 │ ...││ ...│
 ```
 
 That makes invisible layout problems obvious.
+
+For a deliberate visual-ish snapshot, run:
+
+```sh
+go test ./internal/tui -run TestViewVisualSnapshot -v
+```
+
+This logs a stripped, numbered render of the TUI. It is useful for checking title bars, borders, grouping separators, and help text without taking a screenshot.
 
 ## What to test after UI changes
 

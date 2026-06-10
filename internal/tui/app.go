@@ -55,14 +55,16 @@ type Model struct {
 }
 
 var (
-	borderColor = lipgloss.Color("63")
-	mutedColor  = lipgloss.Color("241")
-	accentColor = lipgloss.Color("170")
-	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(accentColor)
-	mutedStyle  = lipgloss.NewStyle().Foreground(mutedColor)
-	listStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor)
-	paneStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor)
-	selected    = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(accentColor).Bold(true)
+	borderColor     = lipgloss.Color("63")
+	mutedColor      = lipgloss.Color("241")
+	accentColor     = lipgloss.Color("170")
+	titleStyle      = lipgloss.NewStyle().Bold(true).Foreground(accentColor)
+	mutedStyle      = lipgloss.NewStyle().Foreground(mutedColor)
+	listStyle       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor)
+	paneStyle       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor)
+	selected        = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(accentColor).Bold(true)
+	pillStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(accentColor).Bold(true).Padding(0, 1)
+	headerMetaStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 )
 
 const refreshInterval = 200 * time.Millisecond
@@ -196,33 +198,64 @@ func (m Model) View() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		fitLine(titleStyle.Render("suphuh"), width),
+		m.renderTitleBar(width),
 		lipgloss.JoinHorizontal(lipgloss.Top, left, right),
-		fitLine(help, width),
+		insetLine(help, width),
 	)
 }
 
+func (m Model) renderTitleBar(width int) string {
+	innerWidth := max(1, width-2)
+	brand := titleStyle.Render("sup?huh?")
+	counts := m.agentCounts()
+	right := mutedStyle.Render(fmt.Sprintf("%d panes • %d agents • %d working", len(m.panes), counts.agents, counts.working))
+	gap := innerWidth - ansi.StringWidth(brand) - ansi.StringWidth(right)
+	if gap < 1 {
+		return insetLine(brand, width)
+	}
+	return insetLine(brand+strings.Repeat(" ", gap)+right, width)
+}
+
 func (m Model) renderList(width int, height int) string {
-	var b strings.Builder
+	lines := make([]string, 0, height)
 	visible := m.visiblePanes(height)
+	start := m.listStart(height)
+	separatorAfter := m.agentGroupEnd()
 	for i, pane := range visible {
-		idx := m.listStart(height) + i
-		glyph := m.statusGlyph(pane, idx == m.selected)
-		line := fmt.Sprintf("%s %-16s %-9s",
-			glyph,
-			truncate(pane.SessionName, 16),
-			truncate(displayCommand(pane), 9),
-		)
-		line = fitLine(line, width)
-		if idx == m.selected {
+		idx := start + i
+		if m.viewMode == ViewAgentsFirst && idx == separatorAfter && len(lines) < height {
+			lines = append(lines, mutedStyle.Render(strings.Repeat("─", max(0, width))))
+		}
+
+		isSelected := idx == m.selected
+		glyph := m.statusGlyph(pane, isSelected)
+		session := fitLine(truncate(pane.SessionName, 16), 16)
+		command := fitLine(truncate(displayCommand(pane), 9), 9)
+		if !isSelected {
+			session = sessionStyle(pane.SessionName).Render(session)
+		}
+		line := fitLine(fmt.Sprintf("%s %s %s", glyph, session, command), width)
+		if isSelected {
 			line = selected.Render(ansi.Strip(line))
 		}
-		b.WriteString(line)
-		if i < len(visible)-1 {
-			b.WriteByte('\n')
-		}
+		lines = append(lines, line)
 	}
-	return b.String()
+
+	lines = m.addBranding(lines, width, height)
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) addBranding(lines []string, width int, height int) []string {
+	if len(lines) > height-4 || width < 18 {
+		return lines
+	}
+	for len(lines) < height-3 {
+		lines = append(lines, "")
+	}
+	return append(lines,
+		mutedStyle.Render(centerText("sup?huh?", width)),
+		mutedStyle.Render(centerText("(supper?)", width)),
+	)
 }
 
 func (m *Model) updatePreviewViewport() {
@@ -254,9 +287,11 @@ func (m Model) renderPreviewHeader(width int) []string {
 	pane := m.panes[m.selected]
 	path := pane.CurrentPath
 	command := displayCommand(pane)
-	location := fmt.Sprintf("%s  %s  %s", command, pane.SessionName, path)
+	metaWidth := max(1, width-ansi.StringWidth(command)-4)
+	meta := headerMetaStyle.Render(truncate(fmt.Sprintf("%s  %s", pane.SessionName, path), metaWidth))
+	location := pillStyle.Render(command) + " " + meta
 	return []string{
-		fitLine(titleStyle.Render(truncate(location, width)), width),
+		fitLine(location, width),
 		mutedStyle.Render(strings.Repeat("─", max(0, width))),
 	}
 }
@@ -302,6 +337,40 @@ func layout(width, height int) (leftWidth int, rightWidth int, bodyHeight int) {
 	rightWidth = max(1, rightOuter-paneStyle.GetHorizontalFrameSize())
 	bodyHeight = max(1, bodyOuter-paneStyle.GetVerticalFrameSize())
 	return leftWidth, rightWidth, bodyHeight
+}
+
+type agentCounts struct {
+	agents  int
+	working int
+}
+
+func (m Model) agentCounts() agentCounts {
+	var counts agentCounts
+	for _, pane := range m.panes {
+		if !isAgentPane(pane) {
+			continue
+		}
+		counts.agents++
+		if pane.HasStatus && pane.Status.State == "working" {
+			counts.working++
+		}
+	}
+	return counts
+}
+
+func (m Model) agentGroupEnd() int {
+	if m.viewMode != ViewAgentsFirst {
+		return -1
+	}
+	for i, pane := range m.panes {
+		if !isAgentPane(pane) {
+			if i == 0 || i == len(m.panes) {
+				return -1
+			}
+			return i
+		}
+	}
+	return -1
 }
 
 func (m Model) visiblePanes(height int) []tmux.Pane {
@@ -478,6 +547,15 @@ func spinnerGlyph(frame int) string {
 	return frames[frame%len(frames)]
 }
 
+func sessionStyle(session string) lipgloss.Style {
+	palette := []lipgloss.Color{"81", "216", "183", "114", "219", "153", "222", "147"}
+	idx := 0
+	for _, r := range session {
+		idx = (idx*31 + int(r)) % len(palette)
+	}
+	return lipgloss.NewStyle().Foreground(palette[idx])
+}
+
 func displayCommand(pane tmux.Pane) string {
 	if pane.DisplayCommand != "" {
 		return pane.DisplayCommand
@@ -515,6 +593,23 @@ func cleanPreviewLine(s string) string {
 		}
 		return r
 	}, s)
+}
+
+func centerText(s string, width int) string {
+	textWidth := ansi.StringWidth(s)
+	if textWidth >= width {
+		return truncate(s, width)
+	}
+	left := (width - textWidth) / 2
+	return strings.Repeat(" ", left) + s
+}
+
+func insetLine(s string, width int) string {
+	const padding = 2
+	if width <= padding*2 {
+		return fitLine(s, width)
+	}
+	return strings.Repeat(" ", padding) + fitLine(s, width-padding*2) + strings.Repeat(" ", padding)
 }
 
 func fitLine(s string, width int) string {

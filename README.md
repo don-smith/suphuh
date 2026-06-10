@@ -40,7 +40,7 @@ tmux display-popup -E -w 55% -h 65% '/Users/don/go/bin/suphuh'
 In `.tmux.conf`, omit the leading `tmux`:
 
 ```tmux
-bind-key A display-popup -E -w 55% -h 65% '/Users/don/go/bin/suphuh'
+bind-key K display-popup -E -w 55% -h 65% '/Users/don/go/bin/suphuh'
 ```
 
 See [`docs/product.md`](docs/product.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/adapter-interface.md`](docs/adapter-interface.md), [`docs/status.md`](docs/status.md), and [`docs/backlog.md`](docs/backlog.md).
