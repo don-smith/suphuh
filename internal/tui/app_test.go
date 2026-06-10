@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"suphuh/internal/tmux"
+	"github.com/don-smith/suphuh/internal/tmux"
 )
 
 func TestViewContainsDesignElements(t *testing.T) {

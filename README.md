@@ -1,46 +1,162 @@
 # suphuh
 
-A tmux-first terminal popup for quickly checking on coding agents.
+A small tmux popup for answering one question quickly: **sup?huh?**
 
-The goal is intentionally small: press one tmux key binding, see every tracked agent instance, preview its pane output, and jump to it if needed.
+In practice: press a tmux keybinding, see what your coding agents are doing, preview their panes, and jump to the one that needs attention.
 
-## Current prototype
+This is a personal workflow tool. It is intentionally tmux-first, keyboard-first, and optimized for checking on multiple coding-agent panes without switching sessions/windows manually.
 
-```sh
-go run ./cmd/suphuh
-```
+## Features
 
-Inside the TUI:
+- Centered tmux popup UI.
+- Live list of tmux panes.
+- `all` and `agents first` views.
+- Live preview of the selected pane via `tmux capture-pane`.
+- Jump to selected pane with `Enter`.
+- Vim-style navigation.
+- Persistent selected pane, view mode, and ASCII-art choice.
+- Pi coding agent status integration:
+  - working spinner
+  - idle checkmark
+  - blocked indicator
+- Process-tree labels so Pi shows as `pi` instead of `node`.
+- Tasteful terminal nonsense, including cycleable question-mark ASCII art.
 
-- `j`/`k` or arrow keys move through tmux panes.
-- `v` switches between `all` and `agents first` views.
-- The right side previews the selected pane via `tmux capture-pane`.
-- Selection and view mode persist between popup invocations.
-- `Enter` jumps to the selected pane.
-- `q`/`Esc` closes.
+## Install
 
-Plain listing mode is also available:
+Requires:
 
-```sh
-go run ./cmd/suphuh --list
-```
+- Go
+- tmux
 
-Install and use from tmux:
+Install from this repo:
 
 ```sh
 go install ./cmd/suphuh
 ```
 
-From a shell, invoke tmux commands with the `tmux` executable:
+After the repo is available on GitHub, this should also work:
 
 ```sh
-tmux display-popup -E -w 55% -h 65% '/Users/don/go/bin/suphuh'
+go install github.com/don-smith/suphuh/cmd/suphuh@latest
 ```
 
-In `.tmux.conf`, omit the leading `tmux`:
+## Tmux binding
+
+Recommended binding:
 
 ```tmux
-bind-key K display-popup -E -w 55% -h 65% '/Users/don/go/bin/suphuh'
+bind-key K display-popup -E -w 55% -h 65% "$HOME/go/bin/suphuh"
 ```
 
-See [`docs/product.md`](docs/product.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/adapter-interface.md`](docs/adapter-interface.md), [`docs/status.md`](docs/status.md), and [`docs/backlog.md`](docs/backlog.md).
+Reload tmux config:
+
+```sh
+tmux source-file ~/.tmux.conf
+```
+
+Then open with:
+
+```text
+prefix + K
+```
+
+From a shell, you can test the popup with:
+
+```sh
+tmux display-popup -E -w 55% -h 65% "$HOME/go/bin/suphuh"
+```
+
+## Controls
+
+Inside suphuh:
+
+| Key | Action |
+| --- | --- |
+| `j` / `k` | Move selection down/up |
+| `J` / `K` | Scroll preview down/up one line |
+| `v` | Toggle view: `all` / `agents first` |
+| `?` | Cycle ASCII art |
+| `Enter` | Jump to selected tmux pane |
+| `q` / `Esc` | Close popup |
+
+If the preview is at the bottom, it follows live output. If you scroll up, auto-follow pauses until you scroll back to the bottom or select another pane.
+
+## Pi status integration
+
+Install the Pi extension:
+
+```sh
+suphuh install-hook pi
+```
+
+This writes:
+
+```text
+~/.pi/agent/extensions/suphuh-status.ts
+```
+
+For existing Pi sessions, run:
+
+```text
+/reload
+```
+
+or restart Pi. New Pi sessions load it automatically.
+
+The extension writes status files under:
+
+```text
+~/.suphuh/status/
+```
+
+suphuh reads those files and renders status glyphs in the pane list.
+
+## Plain list mode
+
+```sh
+suphuh --list
+```
+
+## State
+
+suphuh stores lightweight local state in:
+
+```text
+~/.suphuh/state.json
+```
+
+This currently includes:
+
+- selected pane id
+- view mode
+- selected ASCII art
+
+## Development
+
+Run tests:
+
+```sh
+go test ./...
+```
+
+Run the visual-ish TUI snapshot test:
+
+```sh
+go test ./internal/tui -run TestViewVisualSnapshot -v
+```
+
+Run locally:
+
+```sh
+go run ./cmd/suphuh
+```
+
+## Docs
+
+- [`docs/product.md`](docs/product.md)
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/testing.md`](docs/testing.md)
+- [`docs/adapter-interface.md`](docs/adapter-interface.md)
+- [`docs/status.md`](docs/status.md)
+- [`docs/backlog.md`](docs/backlog.md)

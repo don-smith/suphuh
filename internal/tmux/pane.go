@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"suphuh/internal/process"
-	"suphuh/internal/status"
+	"github.com/don-smith/suphuh/internal/process"
+	"github.com/don-smith/suphuh/internal/status"
 )
 
 // Pane describes a tmux pane as reported by `tmux list-panes`.

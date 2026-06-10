@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"suphuh/internal/appstate"
-	"suphuh/internal/tmux"
+	"github.com/don-smith/suphuh/internal/appstate"
+	"github.com/don-smith/suphuh/internal/tmux"
 )
 
 type panePreviewMsg struct {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"suphuh/internal/integrations"
-	"suphuh/internal/tmux"
-	"suphuh/internal/tui"
+	"github.com/don-smith/suphuh/internal/integrations"
+	"github.com/don-smith/suphuh/internal/tmux"
+	"github.com/don-smith/suphuh/internal/tui"
 )
 
 func main() {
