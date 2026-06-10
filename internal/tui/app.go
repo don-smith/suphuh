@@ -50,6 +50,8 @@ type Model struct {
 	width           int
 	height          int
 	jumping         bool
+	spinnerFrame    int
+	followPreview   bool
 }
 
 var (
@@ -63,12 +65,12 @@ var (
 	selected    = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(accentColor).Bold(true)
 )
 
-const refreshInterval = 750 * time.Millisecond
+const refreshInterval = 200 * time.Millisecond
 
 func New(panes []tmux.Pane) Model {
 	vp := viewport.New(80, 20)
 	state := appstate.Load()
-	m := Model{panes: panes, previewViewport: vp, viewMode: normalizeViewMode(state.View)}
+	m := Model{panes: panes, previewViewport: vp, viewMode: normalizeViewMode(state.View), followPreview: true}
 	m.applyView()
 	m.selectPane(state.SelectedPaneID)
 	return m
@@ -97,26 +99,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "j", "down":
 			if m.selected < len(m.panes)-1 {
 				m.selected++
+				m.followPreview = true
 				m.saveState()
 				return m, m.loadPreview()
 			}
 		case "k", "up":
 			if m.selected > 0 {
 				m.selected--
+				m.followPreview = true
 				m.saveState()
 				return m, m.loadPreview()
 			}
-		case "ctrl+d", "pgdown":
-			m.previewViewport.HalfViewDown()
+		case "J":
+			m.previewViewport.LineDown(1)
+			m.followPreview = m.previewViewport.AtBottom()
 			return m, nil
-		case "ctrl+u", "pgup":
-			m.previewViewport.HalfViewUp()
+		case "K":
+			m.previewViewport.LineUp(1)
+			m.followPreview = false
 			return m, nil
 		case "v":
 			selectedPaneID := m.selectedPaneID()
 			m.viewMode = m.viewMode.Next()
 			m.applyView()
 			m.selectPane(selectedPaneID)
+			m.followPreview = true
 			m.saveState()
 			return m, m.loadPreview()
 		case "enter":
@@ -131,10 +138,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.err = msg.err
 		m.preview = msg.content
+		wasFollowing := m.followPreview || m.previewViewport.AtBottom()
 		m.updatePreviewViewport()
-		m.previewViewport.GotoBottom()
+		if wasFollowing {
+			m.previewViewport.GotoBottom()
+			m.followPreview = true
+		}
 		return m, nil
 	case refreshTickMsg:
+		m.spinnerFrame++
 		return m, refreshPanes()
 	case panesRefreshedMsg:
 		if msg.err != nil {
@@ -173,9 +185,9 @@ func (m Model) View() string {
 	leftWidth, rightWidth, bodyHeight := layout(width, height)
 
 	left := renderBox(listStyle, leftWidth, bodyHeight, m.renderList(leftWidth, bodyHeight))
-	right := renderBox(paneStyle, rightWidth, bodyHeight, m.previewViewport.View())
+	right := renderBox(paneStyle, rightWidth, bodyHeight, m.renderPreviewPane(rightWidth, bodyHeight))
 
-	help := mutedStyle.Render(fmt.Sprintf("view: %s • v: switch • j/k: move • ctrl-u/d: scroll • enter: jump • q/esc: close", m.viewMode.Label()))
+	help := mutedStyle.Render(fmt.Sprintf("view: %s • v: switch • j/k: move • K/J: scroll line • enter: jump • q/esc: close", m.viewMode.Label()))
 	if m.jumping {
 		help = mutedStyle.Render("jumping…")
 	}
@@ -195,7 +207,7 @@ func (m Model) renderList(width int, height int) string {
 	visible := m.visiblePanes(height)
 	for i, pane := range visible {
 		idx := m.listStart(height) + i
-		glyph := statusGlyph(pane, idx == m.selected)
+		glyph := m.statusGlyph(pane, idx == m.selected)
 		line := fmt.Sprintf("%s %-16s %-9s",
 			glyph,
 			truncate(pane.SessionName, 16),
@@ -220,21 +232,47 @@ func (m *Model) updatePreviewViewport() {
 
 	_, rightWidth, bodyHeight := layout(m.effectiveWidth(), m.effectiveHeight())
 	m.previewViewport.Width = rightWidth
-	m.previewViewport.Height = bodyHeight
+	m.previewViewport.Height = previewViewportHeight(bodyHeight)
 	m.previewViewport.SetContent(m.renderPreviewContent(rightWidth))
 }
 
-func (m Model) renderPreviewContent(width int) string {
-	pane := m.panes[m.selected]
-	header := fmt.Sprintf("%s:%d.%d %s", pane.SessionName, pane.WindowIndex, pane.PaneIndex, pane.CurrentPath)
-	lines := []string{titleStyle.Render(truncate(header, max(1, width)))}
+func (m Model) renderPreviewPane(width int, height int) string {
+	if len(m.panes) == 0 {
+		return fitBox(mutedStyle.Render("No pane selected."), width, height)
+	}
 
+	headerLines := m.renderPreviewHeader(width)
+	viewportHeight := previewViewportHeight(height)
+	m.previewViewport.Height = viewportHeight
+	body := fitBox(m.previewViewport.View(), width, viewportHeight)
+
+	parts := append(headerLines, strings.Split(body, "\n")...)
+	return fitBox(strings.Join(parts, "\n"), width, height)
+}
+
+func (m Model) renderPreviewHeader(width int) []string {
+	pane := m.panes[m.selected]
+	path := pane.CurrentPath
+	command := displayCommand(pane)
+	location := fmt.Sprintf("%s  %s  %s", command, pane.SessionName, path)
+	return []string{
+		fitLine(titleStyle.Render(truncate(location, width)), width),
+		mutedStyle.Render(strings.Repeat("─", max(0, width))),
+	}
+}
+
+func previewViewportHeight(totalHeight int) int {
+	return max(1, totalHeight-2)
+}
+
+func (m Model) renderPreviewContent(width int) string {
+	lines := make([]string, 0, 120)
 	for _, line := range strings.Split(strings.TrimRight(m.preview, "\n"), "\n") {
 		line = cleanPreviewLine(line)
 		lines = append(lines, truncate(line, max(1, width)))
 	}
 
-	if len(lines) == 1 {
+	if len(lines) == 0 {
 		lines = append(lines, mutedStyle.Render("No captured output."))
 	}
 
@@ -405,7 +443,7 @@ func isAgentPane(pane tmux.Pane) bool {
 	}
 }
 
-func statusGlyph(pane tmux.Pane, selectedRow bool) string {
+func (m Model) statusGlyph(pane tmux.Pane, selectedRow bool) string {
 	if !isAgentPane(pane) {
 		return " "
 	}
@@ -420,7 +458,7 @@ func statusGlyph(pane tmux.Pane, selectedRow bool) string {
 	style := mutedStyle
 	switch pane.Status.State {
 	case "working":
-		glyph = "●"
+		glyph = spinnerGlyph(m.spinnerFrame)
 		style = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
 	case "blocked":
 		glyph = "◆"
@@ -433,6 +471,11 @@ func statusGlyph(pane tmux.Pane, selectedRow bool) string {
 		return glyph
 	}
 	return style.Render(glyph)
+}
+
+func spinnerGlyph(frame int) string {
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	return frames[frame%len(frames)]
 }
 
 func displayCommand(pane tmux.Pane) string {

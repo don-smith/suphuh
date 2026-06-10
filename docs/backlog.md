@@ -2,9 +2,7 @@
 
 ## Near-term
 
-- Add a stable metadata header to the right preview pane with path/session/command.
 - Add stale-status handling for old status report files.
-- Explore lightweight animations/spinners for active agents.
 - Add explicit tracking/marking so the list can focus on agent panes instead of every pane.
 - Improve process identification with per-agent adapters.
 
@@ -16,6 +14,8 @@
 - Add `all` and `agents first` views.
 - Highlight the full selected row in the pane list.
 - Hide status glyphs for non-agent panes, even when stale status files exist.
+- Add a stable metadata header to the right preview pane with path/session/command.
+- Add lightweight spinner animation for working agents.
 
 ## Design pass
 
