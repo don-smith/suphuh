@@ -7,7 +7,15 @@
 - Explore lightweight animations/spinners for active agents.
 - Add explicit tracking/marking so the list can focus on agent panes instead of every pane.
 - Improve process identification with per-agent adapters.
-- Add a `suphuh install-hook pi` helper for installing the Pi status extension.
+
+## Done
+
+- Install Pi status extension with `suphuh install-hook pi`.
+- Live refresh pane previews and status while popup is open.
+- Persist selected pane and view mode between popup invocations.
+- Add `all` and `agents first` views.
+- Highlight the full selected row in the pane list.
+- Hide status glyphs for non-agent panes, even when stale status files exist.
 
 ## Design pass
 

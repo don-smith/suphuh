@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"suphuh/internal/appstate"
 	"suphuh/internal/tmux"
 )
 
@@ -31,9 +33,17 @@ type panesRefreshedMsg struct {
 	err   error
 }
 
+type ViewMode string
+
+const (
+	ViewAll         ViewMode = "all"
+	ViewAgentsFirst ViewMode = "agents-first"
+)
+
 type Model struct {
 	panes           []tmux.Pane
 	selected        int
+	viewMode        ViewMode
 	preview         string
 	previewViewport viewport.Model
 	err             error
@@ -57,7 +67,11 @@ const refreshInterval = 750 * time.Millisecond
 
 func New(panes []tmux.Pane) Model {
 	vp := viewport.New(80, 20)
-	return Model{panes: panes, previewViewport: vp}
+	state := appstate.Load()
+	m := Model{panes: panes, previewViewport: vp, viewMode: normalizeViewMode(state.View)}
+	m.applyView()
+	m.selectPane(state.SelectedPaneID)
+	return m
 }
 
 func Run(panes []tmux.Pane) error {
@@ -66,7 +80,7 @@ func Run(panes []tmux.Pane) error {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadPreview(), scheduleRefresh())
+	return tea.Batch(tea.HideCursor, m.loadPreview(), scheduleRefresh())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -83,11 +97,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "j", "down":
 			if m.selected < len(m.panes)-1 {
 				m.selected++
+				m.saveState()
 				return m, m.loadPreview()
 			}
 		case "k", "up":
 			if m.selected > 0 {
 				m.selected--
+				m.saveState()
 				return m, m.loadPreview()
 			}
 		case "ctrl+d", "pgdown":
@@ -96,6 +112,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+u", "pgup":
 			m.previewViewport.HalfViewUp()
 			return m, nil
+		case "v":
+			selectedPaneID := m.selectedPaneID()
+			m.viewMode = m.viewMode.Next()
+			m.applyView()
+			m.selectPane(selectedPaneID)
+			m.saveState()
+			return m, m.loadPreview()
 		case "enter":
 			if len(m.panes) > 0 {
 				m.jumping = true
@@ -149,10 +172,10 @@ func (m Model) View() string {
 
 	leftWidth, rightWidth, bodyHeight := layout(width, height)
 
-	left := renderBox(listStyle, leftWidth, bodyHeight, m.renderList(bodyHeight))
+	left := renderBox(listStyle, leftWidth, bodyHeight, m.renderList(leftWidth, bodyHeight))
 	right := renderBox(paneStyle, rightWidth, bodyHeight, m.previewViewport.View())
 
-	help := mutedStyle.Render("j/k: move • ctrl-u/d: scroll preview • enter: jump • q/esc: close")
+	help := mutedStyle.Render(fmt.Sprintf("view: %s • v: switch • j/k: move • ctrl-u/d: scroll • enter: jump • q/esc: close", m.viewMode.Label()))
 	if m.jumping {
 		help = mutedStyle.Render("jumping…")
 	}
@@ -167,20 +190,23 @@ func (m Model) View() string {
 	)
 }
 
-func (m Model) renderList(height int) string {
+func (m Model) renderList(width int, height int) string {
 	var b strings.Builder
-	for i, pane := range m.visiblePanes(height) {
+	visible := m.visiblePanes(height)
+	for i, pane := range visible {
 		idx := m.listStart(height) + i
+		glyph := statusGlyph(pane, idx == m.selected)
 		line := fmt.Sprintf("%s %-16s %-9s",
-			statusGlyph(pane),
+			glyph,
 			truncate(pane.SessionName, 16),
 			truncate(displayCommand(pane), 9),
 		)
+		line = fitLine(line, width)
 		if idx == m.selected {
-			line = selected.Render(line)
+			line = selected.Render(ansi.Strip(line))
 		}
 		b.WriteString(line)
-		if i < len(m.visiblePanes(height))-1 {
+		if i < len(visible)-1 {
 			b.WriteByte('\n')
 		}
 	}
@@ -261,12 +287,23 @@ func (m Model) listStart(height int) int {
 }
 
 func (m *Model) replacePanes(panes []tmux.Pane) {
-	selectedPaneID := ""
-	if len(m.panes) > 0 && m.selected >= 0 && m.selected < len(m.panes) {
-		selectedPaneID = m.panes[m.selected].PaneID
-	}
-
+	selectedPaneID := m.selectedPaneID()
 	m.panes = panes
+	m.applyView()
+	m.selectPane(selectedPaneID)
+	m.updatePreviewViewport()
+}
+
+func (m *Model) applyView() {
+	if m.viewMode != ViewAgentsFirst {
+		return
+	}
+	sort.SliceStable(m.panes, func(i, j int) bool {
+		return isAgentPane(m.panes[i]) && !isAgentPane(m.panes[j])
+	})
+}
+
+func (m *Model) selectPane(paneID string) {
 	if len(m.panes) == 0 {
 		m.selected = 0
 		m.preview = ""
@@ -275,15 +312,26 @@ func (m *Model) replacePanes(panes []tmux.Pane) {
 	}
 
 	m.selected = min(m.selected, len(m.panes)-1)
-	if selectedPaneID != "" {
-		for i, pane := range m.panes {
-			if pane.PaneID == selectedPaneID {
-				m.selected = i
-				break
-			}
+	if paneID == "" {
+		return
+	}
+	for i, pane := range m.panes {
+		if pane.PaneID == paneID {
+			m.selected = i
+			return
 		}
 	}
-	m.updatePreviewViewport()
+}
+
+func (m Model) selectedPaneID() string {
+	if len(m.panes) == 0 || m.selected < 0 || m.selected >= len(m.panes) {
+		return ""
+	}
+	return m.panes[m.selected].PaneID
+}
+
+func (m Model) saveState() {
+	_ = appstate.Save(appstate.State{SelectedPaneID: m.selectedPaneID(), View: string(m.viewMode)})
 }
 
 func scheduleRefresh() tea.Cmd {
@@ -323,20 +371,68 @@ func (m Model) jumpToSelected() tea.Cmd {
 	}
 }
 
-func statusGlyph(pane tmux.Pane) string {
+func normalizeViewMode(view string) ViewMode {
+	switch ViewMode(view) {
+	case ViewAgentsFirst:
+		return ViewAgentsFirst
+	default:
+		return ViewAll
+	}
+}
+
+func (v ViewMode) Next() ViewMode {
+	if v == ViewAgentsFirst {
+		return ViewAll
+	}
+	return ViewAgentsFirst
+}
+
+func (v ViewMode) Label() string {
+	switch v {
+	case ViewAgentsFirst:
+		return "agents first"
+	default:
+		return "all"
+	}
+}
+
+func isAgentPane(pane tmux.Pane) bool {
+	switch displayCommand(pane) {
+	case "pi", "claude", "codex", "aider", "goose", "opencode":
+		return true
+	default:
+		return false
+	}
+}
+
+func statusGlyph(pane tmux.Pane, selectedRow bool) string {
+	if !isAgentPane(pane) {
+		return " "
+	}
 	if !pane.HasStatus {
+		if selectedRow {
+			return "·"
+		}
 		return mutedStyle.Render("·")
 	}
+
+	glyph := "?"
+	style := mutedStyle
 	switch pane.Status.State {
 	case "working":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render("●")
+		glyph = "●"
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
 	case "blocked":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render("◆")
+		glyph = "◆"
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	case "idle":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render("✓")
-	default:
-		return mutedStyle.Render("?")
+		glyph = "✓"
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	}
+	if selectedRow {
+		return glyph
+	}
+	return style.Render(glyph)
 }
 
 func displayCommand(pane tmux.Pane) string {

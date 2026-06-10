@@ -13,7 +13,9 @@ go run ./cmd/suphuh
 Inside the TUI:
 
 - `j`/`k` or arrow keys move through tmux panes.
+- `v` switches between `all` and `agents first` views.
 - The right side previews the selected pane via `tmux capture-pane`.
+- Selection and view mode persist between popup invocations.
 - `Enter` jumps to the selected pane.
 - `q`/`Esc` closes.
 
