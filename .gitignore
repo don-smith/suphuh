@@ -1,0 +1,12 @@
+# build outputs
+/bin/
+/dist/
+*.out
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# local state
+.suphuh/
