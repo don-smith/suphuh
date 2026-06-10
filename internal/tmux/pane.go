@@ -56,6 +56,7 @@ func ListPanes(ctx context.Context) ([]Pane, error) {
 		panes = append(panes, pane)
 	}
 
+	cleanupStaleStatuses(panes)
 	enrichDisplayCommands(ctx, panes)
 	return panes, nil
 }
@@ -122,7 +123,29 @@ func enrichDisplayCommands(ctx context.Context, panes []Pane) {
 		if label := labels[panes[i].PanePID]; label != "" && isAmbiguousRuntime(panes[i].CurrentCommand) {
 			panes[i].DisplayCommand = label
 		}
-		panes[i].Status, panes[i].HasStatus = status.LoadForPane(panes[i].PaneID)
+		if isKnownAgentCommand(panes[i].DisplayCommand) {
+			panes[i].Status, panes[i].HasStatus = status.LoadForPane(panes[i].PaneID)
+		} else {
+			_ = status.RemoveForPane(panes[i].PaneID)
+			panes[i].HasStatus = false
+		}
+	}
+}
+
+func cleanupStaleStatuses(panes []Pane) {
+	active := make(map[string]bool, len(panes))
+	for _, pane := range panes {
+		active[pane.PaneID] = true
+	}
+	_ = status.Cleanup(active)
+}
+
+func isKnownAgentCommand(command string) bool {
+	switch cleanCommandName(command) {
+	case "pi", "claude", "codex", "aider", "goose", "opencode", "gemini":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -436,7 +436,7 @@ func (v ViewMode) Label() string {
 
 func isAgentPane(pane tmux.Pane) bool {
 	switch displayCommand(pane) {
-	case "pi", "claude", "codex", "aider", "goose", "opencode":
+	case "pi", "claude", "codex", "aider", "goose", "opencode", "gemini":
 		return true
 	default:
 		return false

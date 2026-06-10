@@ -2,9 +2,9 @@
 
 ## Near-term
 
-- Add stale-status handling for old status report files.
-- Add explicit tracking/marking so the list can focus on agent panes instead of every pane.
-- Improve process identification with per-agent adapters.
+- Decide whether explicit tracking/marking is still needed now that `agents first` works well.
+- Improve process identification with per-agent adapters where current process-tree labels are insufficient.
+- Do a code review/refactor pass before adding more agent integrations.
 
 ## Done
 
@@ -16,6 +16,7 @@
 - Hide status glyphs for non-agent panes, even when stale status files exist.
 - Add a stable metadata header to the right preview pane with path/session/command.
 - Add lightweight spinner animation for working agents.
+- Clean up stale status files for panes that no longer exist or are no longer agent panes.
 
 ## Design pass
 
