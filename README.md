@@ -4,6 +4,8 @@ A small tmux popup for answering one question quickly: **sup?huh?**
 
 In practice: press a tmux keybinding, see what your coding agents are doing, preview their panes, and jump to the one that needs attention.
 
+![suphuh screenshot](docs/suphuh-screenshot.png)
+
 This is a personal workflow tool. It is intentionally tmux-first, keyboard-first, and optimized for checking on multiple coding-agent panes without switching sessions/windows manually.
 
 ## Features
