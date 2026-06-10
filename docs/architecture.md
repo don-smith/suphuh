@@ -14,8 +14,9 @@ Reasons:
 ## Main components
 
 - `internal/tmux`: thin wrapper around tmux commands.
+- `internal/process`: process-tree inspection for friendlier pane labels.
 - `internal/model`: agent instance and persisted state types.
-- `internal/status`: status heuristics for pane activity/output.
+- `internal/status`: status reports from agent hooks/extensions.
 - `internal/tui`: Bubble Tea application.
 - `cmd/suphuh`: CLI entry point.
 

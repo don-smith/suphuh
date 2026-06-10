@@ -8,11 +8,16 @@ import (
 	"strings"
 	"time"
 
+	"suphuh/internal/integrations"
 	"suphuh/internal/tmux"
 	"suphuh/internal/tui"
 )
 
 func main() {
+	if handled := handleCommand(os.Args[1:]); handled {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -31,6 +36,42 @@ func main() {
 		fmt.Fprintf(os.Stderr, "suphuh: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func handleCommand(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+
+	switch args[0] {
+	case "install-hook":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "usage: suphuh install-hook pi")
+			os.Exit(2)
+		}
+		path, err := integrations.Install(args[1])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "suphuh: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Installed %s status hook: %s\n", args[1], path)
+		fmt.Println("Restart Pi or run /reload in existing Pi sessions to load it.")
+		return true
+	case "help", "--help", "-h":
+		printUsage()
+		return true
+	default:
+		return false
+	}
+}
+
+func printUsage() {
+	fmt.Println("suphuh - tmux popup monitor for coding agents")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  suphuh                 Open TUI")
+	fmt.Println("  suphuh --list          List tmux panes")
+	fmt.Println("  suphuh install-hook pi Install Pi status extension")
 }
 
 func printPanes(panes []tmux.Pane) {
@@ -53,11 +94,18 @@ func printPanes(panes []tmux.Pane) {
 			pane.PaneID,
 			truncate(pane.SessionName, 18),
 			window,
-			truncate(pane.CurrentCommand, 18),
+			truncate(displayCommand(pane), 18),
 			state,
 			shortPath(pane.CurrentPath),
 		)
 	}
+}
+
+func displayCommand(pane tmux.Pane) string {
+	if pane.DisplayCommand != "" {
+		return pane.DisplayCommand
+	}
+	return pane.CurrentCommand
 }
 
 func truncate(s string, max int) string {

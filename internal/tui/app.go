@@ -24,6 +24,13 @@ type jumpDoneMsg struct {
 	err error
 }
 
+type refreshTickMsg time.Time
+
+type panesRefreshedMsg struct {
+	panes []tmux.Pane
+	err   error
+}
+
 type Model struct {
 	panes           []tmux.Pane
 	selected        int
@@ -46,6 +53,8 @@ var (
 	selected    = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(accentColor).Bold(true)
 )
 
+const refreshInterval = 750 * time.Millisecond
+
 func New(panes []tmux.Pane) Model {
 	vp := viewport.New(80, 20)
 	return Model{panes: panes, previewViewport: vp}
@@ -57,7 +66,7 @@ func Run(panes []tmux.Pane) error {
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.loadPreview()
+	return tea.Batch(m.loadPreview(), scheduleRefresh())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -102,6 +111,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updatePreviewViewport()
 		m.previewViewport.GotoBottom()
 		return m, nil
+	case refreshTickMsg:
+		return m, refreshPanes()
+	case panesRefreshedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, scheduleRefresh()
+		}
+		m.err = nil
+		m.replacePanes(msg.panes)
+		return m, tea.Batch(m.loadPreview(), scheduleRefresh())
 	case jumpDoneMsg:
 		m.err = msg.err
 		m.jumping = false
@@ -152,9 +171,10 @@ func (m Model) renderList(height int) string {
 	var b strings.Builder
 	for i, pane := range m.visiblePanes(height) {
 		idx := m.listStart(height) + i
-		line := fmt.Sprintf("%-18s %-10s",
-			truncate(pane.SessionName, 18),
-			truncate(pane.CurrentCommand, 10),
+		line := fmt.Sprintf("%s %-16s %-9s",
+			statusGlyph(pane),
+			truncate(pane.SessionName, 16),
+			truncate(displayCommand(pane), 9),
 		)
 		if idx == m.selected {
 			line = selected.Render(line)
@@ -240,6 +260,47 @@ func (m Model) listStart(height int) int {
 	return start
 }
 
+func (m *Model) replacePanes(panes []tmux.Pane) {
+	selectedPaneID := ""
+	if len(m.panes) > 0 && m.selected >= 0 && m.selected < len(m.panes) {
+		selectedPaneID = m.panes[m.selected].PaneID
+	}
+
+	m.panes = panes
+	if len(m.panes) == 0 {
+		m.selected = 0
+		m.preview = ""
+		m.updatePreviewViewport()
+		return
+	}
+
+	m.selected = min(m.selected, len(m.panes)-1)
+	if selectedPaneID != "" {
+		for i, pane := range m.panes {
+			if pane.PaneID == selectedPaneID {
+				m.selected = i
+				break
+			}
+		}
+	}
+	m.updatePreviewViewport()
+}
+
+func scheduleRefresh() tea.Cmd {
+	return tea.Tick(refreshInterval, func(t time.Time) tea.Msg {
+		return refreshTickMsg(t)
+	})
+}
+
+func refreshPanes() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		panes, err := tmux.ListPanes(ctx)
+		return panesRefreshedMsg{panes: panes, err: err}
+	}
+}
+
 func (m Model) loadPreview() tea.Cmd {
 	if len(m.panes) == 0 {
 		return nil
@@ -260,6 +321,29 @@ func (m Model) jumpToSelected() tea.Cmd {
 		defer cancel()
 		return jumpDoneMsg{err: tmux.JumpToPane(ctx, pane)}
 	}
+}
+
+func statusGlyph(pane tmux.Pane) string {
+	if !pane.HasStatus {
+		return mutedStyle.Render("·")
+	}
+	switch pane.Status.State {
+	case "working":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render("●")
+	case "blocked":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render("◆")
+	case "idle":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render("✓")
+	default:
+		return mutedStyle.Render("?")
+	}
+}
+
+func displayCommand(pane tmux.Pane) string {
+	if pane.DisplayCommand != "" {
+		return pane.DisplayCommand
+	}
+	return pane.CurrentCommand
 }
 
 func renderBox(style lipgloss.Style, width int, height int, content string) string {

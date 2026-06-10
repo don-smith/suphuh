@@ -6,6 +6,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"suphuh/internal/process"
+	"suphuh/internal/status"
 )
 
 // Pane describes a tmux pane as reported by `tmux list-panes`.
@@ -18,12 +21,17 @@ type Pane struct {
 	PaneID         string
 	PaneIndex      int
 	PaneTitle      string
+	PanePID        int
+	PaneTTY        string
 	CurrentCommand string
+	DisplayCommand string
 	CurrentPath    string
+	Status         status.Report
+	HasStatus      bool
 	Dead           bool
 }
 
-const listPanesFormat = "#{session_id}\t#{session_name}\t#{window_id}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_index}\t#{pane_title}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_dead}"
+const listPanesFormat = "#{session_id}\t#{session_name}\t#{window_id}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_index}\t#{pane_title}\t#{pane_pid}\t#{pane_tty}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_dead}"
 
 // ListPanes returns all panes known to the current tmux server.
 func ListPanes(ctx context.Context) ([]Pane, error) {
@@ -48,12 +56,13 @@ func ListPanes(ctx context.Context) ([]Pane, error) {
 		panes = append(panes, pane)
 	}
 
+	enrichDisplayCommands(ctx, panes)
 	return panes, nil
 }
 
 func parsePaneLine(line string) (Pane, error) {
 	fields := strings.Split(line, "\t")
-	if len(fields) != 11 {
+	if len(fields) != 13 {
 		return Pane{}, fmt.Errorf("unexpected tmux pane line with %d fields: %q", len(fields), line)
 	}
 
@@ -67,9 +76,14 @@ func parsePaneLine(line string) (Pane, error) {
 		return Pane{}, fmt.Errorf("parse pane index %q: %w", fields[6], err)
 	}
 
-	dead, err := strconv.ParseBool(fields[10])
+	panePID, err := strconv.Atoi(fields[8])
 	if err != nil {
-		return Pane{}, fmt.Errorf("parse pane dead flag %q: %w", fields[10], err)
+		return Pane{}, fmt.Errorf("parse pane pid %q: %w", fields[8], err)
+	}
+
+	dead, err := strconv.ParseBool(fields[12])
+	if err != nil {
+		return Pane{}, fmt.Errorf("parse pane dead flag %q: %w", fields[12], err)
 	}
 
 	return Pane{
@@ -81,10 +95,48 @@ func parsePaneLine(line string) (Pane, error) {
 		PaneID:         fields[5],
 		PaneIndex:      paneIndex,
 		PaneTitle:      fields[7],
-		CurrentCommand: fields[8],
-		CurrentPath:    fields[9],
+		PanePID:        panePID,
+		PaneTTY:        fields[9],
+		CurrentCommand: fields[10],
+		DisplayCommand: fields[10],
+		CurrentPath:    fields[11],
 		Dead:           dead,
 	}, nil
+}
+
+func enrichDisplayCommands(ctx context.Context, panes []Pane) {
+	roots := make([]int, 0, len(panes))
+	for i := range panes {
+		panes[i].DisplayCommand = cleanCommandName(panes[i].CurrentCommand)
+		if panes[i].PanePID > 0 && isAmbiguousRuntime(panes[i].CurrentCommand) {
+			roots = append(roots, panes[i].PanePID)
+		}
+	}
+
+	labels, err := process.LabelsForRoots(ctx, roots)
+	if err != nil {
+		return
+	}
+
+	for i := range panes {
+		if label := labels[panes[i].PanePID]; label != "" && isAmbiguousRuntime(panes[i].CurrentCommand) {
+			panes[i].DisplayCommand = label
+		}
+		panes[i].Status, panes[i].HasStatus = status.LoadForPane(panes[i].PaneID)
+	}
+}
+
+func isAmbiguousRuntime(command string) bool {
+	switch cleanCommandName(command) {
+	case "node", "go", "python", "python3", "deno", "bun":
+		return true
+	default:
+		return false
+	}
+}
+
+func cleanCommandName(command string) string {
+	return strings.TrimPrefix(command, "-")
 }
 
 func tmuxCommandError(err error) error {
