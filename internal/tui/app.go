@@ -330,7 +330,7 @@ func (m Model) effectiveHeight() int {
 
 func layout(width, height int) (leftWidth int, rightWidth int, bodyHeight int) {
 	leftOuter := max(30, width/3)
-	rightOuter := max(40, width-leftOuter-2)
+	rightOuter := max(40, width-leftOuter-1)
 	bodyOuter := max(8, height-2)
 
 	leftWidth = max(1, leftOuter-listStyle.GetHorizontalFrameSize())
