@@ -37,7 +37,7 @@ async function publish(state: AgentState, message?: string): Promise<void> {
   if (!enabled()) return;
 
   const path = statusPath();
-  const tmp = `${path}.${process.pid}.tmp`;
+  const tmp = `${path}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   const report = {
     pane_id: paneId,
     agent: "pi",
