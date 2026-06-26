@@ -19,8 +19,8 @@ This is a personal workflow tool. It is intentionally tmux-first, keyboard-first
 - Persistent selected pane, view mode, and ASCII-art choice.
 - Pi coding agent status integration:
   - working spinner
+  - waiting question-mark indicator
   - idle checkmark
-  - blocked indicator
 - Process-tree labels so Pi shows as `pi` instead of `node`.
 - Tasteful terminal nonsense, including cycleable question-mark ASCII art.
 
@@ -112,7 +112,7 @@ The extension writes status files under:
 ~/.suphuh/status/
 ```
 
-suphuh reads those files and renders status glyphs in the pane list.
+suphuh reads those files and renders status glyphs in the pane list. New hooks write `working`, `waiting`, and `idle`; old `blocked` reports are accepted as a legacy alias for `waiting`.
 
 ## Plain list mode
 

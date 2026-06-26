@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/don-smith/suphuh/internal/appstate"
+	"github.com/don-smith/suphuh/internal/status"
 	"github.com/don-smith/suphuh/internal/tmux"
 )
 
@@ -399,7 +400,7 @@ func (m Model) agentCounts() agentCounts {
 			continue
 		}
 		counts.agents++
-		if pane.HasStatus && pane.Status.State == "working" {
+		if pane.HasStatus && pane.Status.State == status.Working {
 			counts.working++
 		}
 	}
@@ -574,13 +575,13 @@ func (m Model) statusGlyph(pane tmux.Pane, selectedRow bool) string {
 	glyph := "?"
 	style := mutedStyle
 	switch pane.Status.State {
-	case "working":
+	case status.Working:
 		glyph = spinnerGlyph(m.spinnerFrame)
 		style = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-	case "blocked":
-		glyph = "◆"
-		style = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
-	case "idle":
+	case status.Waiting, status.Blocked:
+		glyph = waitingGlyph()
+		style = waitingGlyphStyle(m.spinnerFrame)
+	case status.Idle:
 		glyph = "✓"
 		style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	}
@@ -593,6 +594,15 @@ func (m Model) statusGlyph(pane tmux.Pane, selectedRow bool) string {
 func spinnerGlyph(frame int) string {
 	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 	return frames[frame%len(frames)]
+}
+
+func waitingGlyph() string {
+	return "?"
+}
+
+func waitingGlyphStyle(frame int) lipgloss.Style {
+	colors := []lipgloss.Color{mutedColor, lipgloss.Color("214"), accentColor, lipgloss.Color("214")}
+	return lipgloss.NewStyle().Foreground(colors[frame%len(colors)]).Bold(true)
 }
 
 func sessionStyle(session string) lipgloss.Style {

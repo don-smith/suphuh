@@ -50,14 +50,16 @@ Example report:
 States:
 
 - `working`
-- `blocked`
+- `waiting`
 - `idle`
+
+`blocked` is accepted as a legacy alias for `waiting` when reading older status files, but new adapters should write `waiting`.
 
 For a quick manual test without waiting for an agent run, create a report for a pane:
 
 ```sh
 mkdir -p ~/.suphuh/status
-printf '%s\n' '{"pane_id":"%45","agent":"pi","state":"working","updated_at":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}' > ~/.suphuh/status/pct_45.json
+printf '%s\n' '{"pane_id":"%45","agent":"pi","state":"waiting","updated_at":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}' > ~/.suphuh/status/pct_45.json
 ```
 
 Replace `%45`/`pct_45` with the pane id you want to test.
@@ -66,10 +68,10 @@ Replace `%45`/`pct_45` with the pane id you want to test.
 
 Current glyphs:
 
-- `●` working
-- `◆` blocked
-- `✓` idle
-- `·` no status report
+- animated spinner — `working`
+- pulsing `?` — `waiting`
+- `✓` — `idle`
+- `·` — no status report
 
 ## Future adapters
 

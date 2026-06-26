@@ -38,5 +38,5 @@ For each adapter, learn:
 
 - how to identify the process reliably
 - whether it exposes hooks/events/status files
-- what output patterns indicate waiting for user input
+- what hooks, events, or protocol states indicate waiting for user input
 - what failure/completion states look like

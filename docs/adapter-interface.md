@@ -44,12 +44,12 @@ Required fields:
 
 - `pane_id`: tmux pane id, e.g. `%45`
 - `agent`: stable adapter name, e.g. `pi`, `claude`, `codex`
-- `state`: one of `working`, `blocked`, `idle`
+- `state`: one of `working`, `waiting`, `idle`
 - `updated_at`: ISO timestamp
 
 Optional fields:
 
-- `message`: short human-readable detail, especially for blocked/error states
+- `message`: short human-readable detail, especially for waiting/error states
 
 ## File writing rules
 
@@ -66,11 +66,13 @@ Adapters should remove their file on session shutdown when possible. suphuh must
 
 1. Learn the agent's lifecycle hooks/protocol.
 2. Identify how to get the tmux pane id.
-3. Map lifecycle events to `working`, `blocked`, and `idle`.
+3. Map lifecycle events to `working`, `waiting`, and `idle`.
 4. Implement an adapter under `internal/integrations/<agent>/` or equivalent packaged location.
 5. Add an installer command, e.g. `suphuh install-hook <agent>`.
 6. Add docs describing how to reload/restart that agent.
 7. Add tests for status rendering and stale/missing reports.
+
+Compatibility note: suphuh treats legacy `blocked` reports as `waiting` while reading status files, but new adapters should publish `waiting`.
 
 ## ACP/RPC note
 

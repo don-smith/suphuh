@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 const paneId = process.env.TMUX_PANE;
 const statusDir = process.env.SUPHUH_STATUS_DIR || join(homedir(), ".suphuh", "status");
 
-type AgentState = "working" | "blocked" | "idle";
+type AgentState = "working" | "waiting" | "idle";
 
 function enabled(): boolean {
   return !!paneId;
@@ -59,8 +59,8 @@ async function clear(): Promise<void> {
 export default function (pi: ExtensionAPI) {
   if (!enabled()) return;
 
-  let blockedCount = 0;
-  let blockedMessage: string | undefined;
+  let waitingCount = 0;
+  let waitingMessage: string | undefined;
   let agentActive = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -68,14 +68,14 @@ export default function (pi: ExtensionAPI) {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       idleTimer = undefined;
-      if (!agentActive && blockedCount === 0) void publish("idle");
+      if (!agentActive && waitingCount === 0) void publish("idle");
     }, 250);
     idleTimer.unref?.();
   }
 
   function publishDesired() {
-    if (blockedCount > 0) {
-      void publish("blocked", blockedMessage);
+    if (waitingCount > 0) {
+      void publish("waiting", waitingMessage);
     } else if (agentActive) {
       void publish("working");
     } else {
@@ -85,14 +85,14 @@ export default function (pi: ExtensionAPI) {
 
   pi.events.on("herdr:blocked", (data: any) => {
     if (!data?.active) {
-      blockedCount = Math.max(0, blockedCount - 1);
-      if (blockedCount === 0) blockedMessage = undefined;
+      waitingCount = Math.max(0, waitingCount - 1);
+      if (waitingCount === 0) waitingMessage = undefined;
       publishDesired();
       return;
     }
 
-    blockedCount += 1;
-    blockedMessage = data.label;
+    waitingCount += 1;
+    waitingMessage = data.label;
     publishDesired();
   });
 

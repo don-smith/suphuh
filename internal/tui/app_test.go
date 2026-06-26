@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/don-smith/suphuh/internal/status"
 	"github.com/don-smith/suphuh/internal/tmux"
 )
 
@@ -69,6 +70,51 @@ func TestViewMaintainsStableDimensions(t *testing.T) {
 
 	if lineCount(viewA) != lineCount(viewB) {
 		t.Fatalf("line count changed: %d vs %d\nA:\n%s\nB:\n%s", lineCount(viewA), lineCount(viewB), viewA, viewB)
+	}
+}
+
+func TestStatusGlyphRendersWaitingQuestionMark(t *testing.T) {
+	tests := []struct {
+		name  string
+		state status.State
+	}{
+		{name: "waiting", state: status.Waiting},
+		{name: "legacy blocked", state: status.Blocked},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New([]tmux.Pane{{
+				SessionName:    "suphuh",
+				CurrentCommand: "pi",
+				DisplayCommand: "pi",
+				PaneID:         "%1",
+				HasStatus:      true,
+				Status:         status.Report{State: tt.state},
+			}})
+
+			got := ansi.Strip(m.statusGlyph(m.panes[0], false))
+			if got != "?" {
+				t.Fatalf("statusGlyph() = %q, want ?", got)
+			}
+		})
+	}
+}
+
+func TestViewRendersWaitingStatusWithoutChangingDimensions(t *testing.T) {
+	m := New([]tmux.Pane{
+		{SessionName: "suphuh", CurrentCommand: "pi", DisplayCommand: "pi", CurrentPath: "/Users/don/projects/suphuh", PaneID: "%1", HasStatus: true, Status: status.Report{State: status.Waiting}},
+		{SessionName: "notes", CurrentCommand: "zsh", DisplayCommand: "zsh", CurrentPath: "/Users/don", PaneID: "%2"},
+	})
+	m.width = 100
+	m.height = 30
+	m.preview = "waiting\n"
+	m.updatePreviewViewport()
+
+	view := m.View()
+	assertStableView(t, view, 100, 30)
+	if !strings.Contains(ansi.Strip(view), "? suphuh") {
+		t.Fatalf("view missing waiting question mark\n%s", numbered(ansi.Strip(view)))
 	}
 }
 
