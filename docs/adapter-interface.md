@@ -72,8 +72,6 @@ Adapters should remove their file on session shutdown when possible. suphuh must
 6. Add docs describing how to reload/restart that agent.
 7. Add tests for status rendering and stale/missing reports.
 
-Compatibility note: suphuh treats legacy `blocked` reports as `waiting` while reading status files, but new adapters should publish `waiting`.
-
 ## ACP/RPC note
 
 Protocol integrations like ACP or Pi RPC are useful when a host launches and owns the agent process. suphuh currently observes already-running interactive panes, so hook-based status reporting is safer: it does not interfere with the user's terminal UI.

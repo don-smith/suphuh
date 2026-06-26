@@ -53,8 +53,6 @@ States:
 - `waiting`
 - `idle`
 
-`blocked` is accepted as a legacy alias for `waiting` when reading older status files, but new adapters should write `waiting`.
-
 For a quick manual test without waiting for an agent run, create a report for a pane:
 
 ```sh

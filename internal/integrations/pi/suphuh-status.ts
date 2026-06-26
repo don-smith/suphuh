@@ -59,8 +59,8 @@ async function clear(): Promise<void> {
 export default function (pi: ExtensionAPI) {
   if (!enabled()) return;
 
-  let waitingCount = 0;
-  let waitingMessage: string | undefined;
+  let toolCount = 0;
+  let waitingTimer: ReturnType<typeof setTimeout> | undefined;
   let agentActive = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -68,32 +68,50 @@ export default function (pi: ExtensionAPI) {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       idleTimer = undefined;
-      if (!agentActive && waitingCount === 0) void publish("idle");
+      if (!agentActive && toolCount === 0) void publish("idle");
     }, 250);
     idleTimer.unref?.();
   }
 
+  function maybePublishWaiting() {
+    if (toolCount > 0 && agentActive) {
+      void publish("waiting");
+    }
+  }
+
   function publishDesired() {
-    if (waitingCount > 0) {
-      void publish("waiting", waitingMessage);
-    } else if (agentActive) {
+    if (toolCount > 0) {
+      // Don't immediately publish waiting — debounce to skip fast tools.
+      return;
+    }
+    if (agentActive) {
       void publish("working");
     } else {
       setIdleSoon();
     }
   }
 
-  pi.events.on("herdr:blocked", (data: any) => {
-    if (!data?.active) {
-      waitingCount = Math.max(0, waitingCount - 1);
-      if (waitingCount === 0) waitingMessage = undefined;
-      publishDesired();
-      return;
+  pi.on("tool_execution_start", () => {
+    toolCount++;
+    // If a tool takes longer than 200ms, assume it's blocking for user input.
+    if (!waitingTimer) {
+      waitingTimer = setTimeout(() => {
+        waitingTimer = undefined;
+        maybePublishWaiting();
+      }, 200);
+      waitingTimer.unref?.();
     }
+  });
 
-    waitingCount += 1;
-    waitingMessage = data.label;
-    publishDesired();
+  pi.on("tool_execution_end", () => {
+    toolCount = Math.max(0, toolCount - 1);
+    if (toolCount === 0) {
+      if (waitingTimer) {
+        clearTimeout(waitingTimer);
+        waitingTimer = undefined;
+      }
+      publishDesired();
+    }
   });
 
   pi.on("session_start", () => {
@@ -104,16 +122,23 @@ export default function (pi: ExtensionAPI) {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = undefined;
     agentActive = true;
+    toolCount = 0;
     publishDesired();
   });
 
   pi.on("agent_end", () => {
     agentActive = false;
+    toolCount = 0;
+    if (waitingTimer) {
+      clearTimeout(waitingTimer);
+      waitingTimer = undefined;
+    }
     publishDesired();
   });
 
   pi.on("session_shutdown", () => {
     if (idleTimer) clearTimeout(idleTimer);
+    if (waitingTimer) clearTimeout(waitingTimer);
     void clear();
   });
 }

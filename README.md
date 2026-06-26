@@ -112,7 +112,7 @@ The extension writes status files under:
 ~/.suphuh/status/
 ```
 
-suphuh reads those files and renders status glyphs in the pane list. New hooks write `working`, `waiting`, and `idle`; old `blocked` reports are accepted as a legacy alias for `waiting`.
+suphuh reads those files and renders status glyphs in the pane list.
 
 ## Plain list mode
 

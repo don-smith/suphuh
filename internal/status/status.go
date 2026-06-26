@@ -15,7 +15,6 @@ const (
 	Unknown State = "unknown"
 	Working State = "working"
 	Waiting State = "waiting"
-	Blocked State = "blocked"
 	Idle    State = "idle"
 )
 
@@ -48,17 +47,7 @@ func LoadForPane(paneID string) (Report, bool) {
 	if report.State == "" {
 		report.State = Unknown
 	}
-	report.State = normalizeState(report.State)
 	return report, true
-}
-
-func normalizeState(state State) State {
-	switch state {
-	case Blocked:
-		return Waiting
-	default:
-		return state
-	}
 }
 
 func reportPath(paneID string) (string, error) {

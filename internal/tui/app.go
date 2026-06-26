@@ -578,7 +578,7 @@ func (m Model) statusGlyph(pane tmux.Pane, selectedRow bool) string {
 	case status.Working:
 		glyph = spinnerGlyph(m.spinnerFrame)
 		style = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-	case status.Waiting, status.Blocked:
+	case status.Waiting:
 		glyph = waitingGlyph()
 		style = waitingGlyphStyle(m.spinnerFrame)
 	case status.Idle:

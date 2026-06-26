@@ -74,30 +74,18 @@ func TestViewMaintainsStableDimensions(t *testing.T) {
 }
 
 func TestStatusGlyphRendersWaitingQuestionMark(t *testing.T) {
-	tests := []struct {
-		name  string
-		state status.State
-	}{
-		{name: "waiting", state: status.Waiting},
-		{name: "legacy blocked", state: status.Blocked},
-	}
+	m := New([]tmux.Pane{{
+		SessionName:    "suphuh",
+		CurrentCommand: "pi",
+		DisplayCommand: "pi",
+		PaneID:         "%1",
+		HasStatus:      true,
+		Status:         status.Report{State: status.Waiting},
+	}})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := New([]tmux.Pane{{
-				SessionName:    "suphuh",
-				CurrentCommand: "pi",
-				DisplayCommand: "pi",
-				PaneID:         "%1",
-				HasStatus:      true,
-				Status:         status.Report{State: tt.state},
-			}})
-
-			got := ansi.Strip(m.statusGlyph(m.panes[0], false))
-			if got != "?" {
-				t.Fatalf("statusGlyph() = %q, want ?", got)
-			}
-		})
+	got := ansi.Strip(m.statusGlyph(m.panes[0], false))
+	if got != "?" {
+		t.Fatalf("statusGlyph() = %q, want ?", got)
 	}
 }
 
