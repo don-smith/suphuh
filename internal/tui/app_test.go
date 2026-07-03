@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/don-smith/suphuh/internal/status"
 	"github.com/don-smith/suphuh/internal/tmux"
@@ -103,6 +105,101 @@ func TestViewRendersWaitingStatusWithoutChangingDimensions(t *testing.T) {
 	assertStableView(t, view, 100, 30)
 	if !strings.Contains(ansi.Strip(view), "? suphuh") {
 		t.Fatalf("view missing waiting question mark\n%s", numbered(ansi.Strip(view)))
+	}
+}
+
+func TestRenderListShowsPiSessionNameInProcessColumn(t *testing.T) {
+	m := New([]tmux.Pane{{
+		SessionName:    "work",
+		CurrentCommand: "pi",
+		DisplayCommand: "pi",
+		PaneID:         "%1",
+		HasStatus:      true,
+		Status:         status.Report{Agent: "pi", State: status.Idle, SessionName: "API review"},
+	}})
+
+	plain := ansi.Strip(m.renderList(60, 5))
+	if !strings.Contains(plain, "pi API review") {
+		t.Fatalf("list missing pi session name\n%s", numbered(plain))
+	}
+}
+
+func TestRenderListFallsBackToNonMainBranchForUnnamedPiSession(t *testing.T) {
+	m := New([]tmux.Pane{{
+		SessionName:    "work",
+		CurrentCommand: "pi",
+		DisplayCommand: "pi",
+		PaneID:         "%1",
+		HasStatus:      true,
+		Status:         status.Report{Agent: "pi", State: status.Idle, Branch: "feature/api-review"},
+	}})
+
+	plain := ansi.Strip(m.renderList(60, 5))
+	if !strings.Contains(plain, "pi feature/api-review") {
+		t.Fatalf("list missing pi branch fallback\n%s", numbered(plain))
+	}
+}
+
+func TestRenderListLeavesMainBranchUnnamedPiSessionBlank(t *testing.T) {
+	m := New([]tmux.Pane{{
+		SessionName:    "work",
+		CurrentCommand: "pi",
+		DisplayCommand: "pi",
+		PaneID:         "%1",
+		HasStatus:      true,
+		Status:         status.Report{Agent: "pi", State: status.Idle, Branch: "main"},
+	}})
+
+	plain := ansi.Strip(m.renderList(60, 5))
+	if strings.Contains(plain, "main") {
+		t.Fatalf("list should not show main branch for unnamed Pi session\n%s", numbered(plain))
+	}
+}
+
+func TestRenderListUsesPaneBranchWhenStatusBranchMissing(t *testing.T) {
+	m := New([]tmux.Pane{{
+		SessionName:    "work",
+		CurrentCommand: "pi",
+		DisplayCommand: "pi",
+		PaneID:         "%1",
+		HasStatus:      true,
+		CurrentBranch:  "feature/from-pane-path",
+		Status:         status.Report{Agent: "pi", State: status.Idle},
+	}})
+
+	plain := ansi.Strip(m.renderList(60, 5))
+	if !strings.Contains(plain, "pi feature/from-pane-path") {
+		t.Fatalf("list missing pane branch fallback\n%s", numbered(plain))
+	}
+}
+
+func TestRenderListDimsPiBranchSuffix(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	m := New([]tmux.Pane{
+		{SessionName: "shell", CurrentCommand: "zsh", DisplayCommand: "zsh", PaneID: "%1"},
+		{
+			SessionName:    "work",
+			CurrentCommand: "pi",
+			DisplayCommand: "pi",
+			PaneID:         "%2",
+			HasStatus:      true,
+			CurrentBranch:  "feature/branch-label",
+			Status:         status.Report{Agent: "pi", State: status.Idle},
+		},
+	})
+
+	for i, pane := range m.panes {
+		if displayCommand(pane) != "pi" {
+			m.selected = i
+			break
+		}
+	}
+
+	rendered := m.renderList(80, 5)
+	if !strings.Contains(rendered, "pi "+headerMetaStyle.Render("feature/branch-label")) {
+		t.Fatalf("list should dim Pi branch suffix\nraw:\n%q\nplain:\n%s", rendered, numbered(ansi.Strip(rendered)))
 	}
 }
 

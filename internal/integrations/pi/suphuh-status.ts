@@ -7,14 +7,20 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { execFile } from "node:child_process";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 
 const paneId = process.env.TMUX_PANE;
 const statusDir = process.env.SUPHUH_STATUS_DIR || join(homedir(), ".suphuh", "status");
+const execFileAsync = promisify(execFile);
 
 type AgentState = "working" | "waiting" | "idle";
+
+let sessionName: string | undefined;
+let branch: string | undefined;
 
 function enabled(): boolean {
   return !!paneId;
@@ -33,6 +39,27 @@ function statusPath(): string {
   return join(statusDir, `${paneFileName(paneId!)}.json`);
 }
 
+function cleanMetadata(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+async function readGitBranch(cwd: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", cwd, "branch", "--show-current"], {
+      timeout: 1000,
+      windowsHide: true,
+    });
+    return cleanMetadata(String(stdout));
+  } catch {
+    return undefined;
+  }
+}
+
+async function refreshBranch(cwd: string): Promise<void> {
+  branch = await readGitBranch(cwd);
+}
+
 async function publish(state: AgentState, message?: string): Promise<void> {
   if (!enabled()) return;
 
@@ -43,6 +70,8 @@ async function publish(state: AgentState, message?: string): Promise<void> {
     agent: "pi",
     state,
     message,
+    session_name: sessionName,
+    branch,
     updated_at: new Date().toISOString(),
   };
 
@@ -114,16 +143,24 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  pi.on("session_start", () => {
-    void publish("idle");
+  pi.on("session_start", async (_event, ctx) => {
+    sessionName = cleanMetadata(pi.getSessionName());
+    await refreshBranch(ctx.cwd);
+    await publish("idle");
   });
 
-  pi.on("agent_start", () => {
+  pi.on("session_info_changed", (event) => {
+    sessionName = cleanMetadata(event.name);
+    publishDesired();
+  });
+
+  pi.on("agent_start", (_event, ctx) => {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = undefined;
     agentActive = true;
     toolCount = 0;
     publishDesired();
+    void refreshBranch(ctx.cwd).then(() => publishDesired());
   });
 
   pi.on("agent_end", () => {

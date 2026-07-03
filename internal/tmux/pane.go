@@ -26,6 +26,7 @@ type Pane struct {
 	CurrentCommand string
 	DisplayCommand string
 	CurrentPath    string
+	CurrentBranch  string
 	Status         status.Report
 	HasStatus      bool
 	Dead           bool
@@ -58,6 +59,7 @@ func ListPanes(ctx context.Context) ([]Pane, error) {
 
 	cleanupStaleStatuses(panes)
 	enrichDisplayCommands(ctx, panes)
+	enrichGitBranches(ctx, panes)
 	return panes, nil
 }
 
@@ -130,6 +132,31 @@ func enrichDisplayCommands(ctx context.Context, panes []Pane) {
 			panes[i].HasStatus = false
 		}
 	}
+}
+
+func enrichGitBranches(ctx context.Context, panes []Pane) {
+	branchesByPath := make(map[string]string)
+	for i := range panes {
+		if cleanCommandName(panes[i].DisplayCommand) != "pi" || panes[i].CurrentPath == "" {
+			continue
+		}
+
+		branch, ok := branchesByPath[panes[i].CurrentPath]
+		if !ok {
+			branch = gitBranch(ctx, panes[i].CurrentPath)
+			branchesByPath[panes[i].CurrentPath] = branch
+		}
+		panes[i].CurrentBranch = branch
+	}
+}
+
+func gitBranch(ctx context.Context, path string) string {
+	cmd := exec.CommandContext(ctx, "git", "-C", path, "branch", "--show-current")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func cleanupStaleStatuses(panes []Pane) {

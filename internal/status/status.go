@@ -19,11 +19,13 @@ const (
 )
 
 type Report struct {
-	PaneID    string    `json:"pane_id"`
-	Agent     string    `json:"agent"`
-	State     State     `json:"state"`
-	Message   string    `json:"message,omitempty"`
-	UpdatedAt time.Time `json:"updated_at"`
+	PaneID      string    `json:"pane_id"`
+	Agent       string    `json:"agent"`
+	State       State     `json:"state"`
+	Message     string    `json:"message,omitempty"`
+	SessionName string    `json:"session_name,omitempty"`
+	Branch      string    `json:"branch,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func LoadForPane(paneID string) (Report, bool) {

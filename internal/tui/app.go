@@ -242,7 +242,8 @@ func (m Model) renderList(width int, height int) string {
 		isSelected := idx == m.selected
 		glyph := m.statusGlyph(pane, isSelected)
 		session := fitLine(truncate(pane.SessionName, 16), 16)
-		command := fitLine(truncate(displayCommand(pane), 9), 9)
+		commandWidth := max(1, width-20)
+		command := renderListCommand(pane, commandWidth)
 		if !isSelected {
 			session = sessionStyle(pane.SessionName).Render(session)
 		}
@@ -619,6 +620,50 @@ func displayCommand(pane tmux.Pane) string {
 		return pane.DisplayCommand
 	}
 	return pane.CurrentCommand
+}
+
+func displayListCommand(pane tmux.Pane) string {
+	command := displayCommand(pane)
+	if command != "pi" {
+		return command
+	}
+
+	context := piDisplayContext(pane)
+	if context == "" {
+		return command
+	}
+	return command + " " + context
+}
+
+func renderListCommand(pane tmux.Pane, width int) string {
+	raw := truncate(displayListCommand(pane), width)
+	context := piDisplayContext(pane)
+	if displayCommand(pane) != "pi" || context == "" || raw == "pi" {
+		return fitLine(raw, width)
+	}
+
+	prefix := "pi "
+	if !strings.HasPrefix(raw, prefix) {
+		return fitLine(raw, width)
+	}
+	return fitLine(prefix+headerMetaStyle.Render(strings.TrimPrefix(raw, prefix)), width)
+}
+
+func piDisplayContext(pane tmux.Pane) string {
+	if pane.HasStatus && pane.Status.Agent == "pi" {
+		if name := strings.TrimSpace(pane.Status.SessionName); name != "" {
+			return name
+		}
+	}
+
+	branch := strings.TrimSpace(pane.Status.Branch)
+	if branch == "" {
+		branch = strings.TrimSpace(pane.CurrentBranch)
+	}
+	if branch == "" || branch == "main" {
+		return ""
+	}
+	return branch
 }
 
 func renderBox(style lipgloss.Style, width int, height int, content string) string {

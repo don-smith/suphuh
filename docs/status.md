@@ -43,6 +43,8 @@ Example report:
   "pane_id": "%45",
   "agent": "pi",
   "state": "working",
+  "session_name": "API review",
+  "branch": "feature/api-review",
   "updated_at": "2026-06-10T12:00:00.000Z"
 }
 ```
@@ -52,6 +54,11 @@ States:
 - `working`
 - `waiting`
 - `idle`
+
+Optional display metadata:
+
+- `session_name`: Pi's `/name` or `--name` value, if set.
+- `branch`: Git branch for Pi's current working directory, if available. The TUI uses this only when `session_name` is empty, and leaves `main` blank. If this field is missing, suphuh also computes the fallback branch directly from the tmux pane's current path.
 
 For a quick manual test without waiting for an agent run, create a report for a pane:
 
